@@ -1,5 +1,5 @@
 
-Data and scripts linked to the figures in the manuscript: Large regional differences in implementing sustainable fisheries.
+Data and scripts to reproduce the figures in "Large regional differences in implementing sustainable fisheries".
+Data sources are explained in the manuscript. 
 
-Data sources:
-to be added
+The manuscript can be found here: xxxx
