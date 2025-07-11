@@ -74,35 +74,24 @@ plot1 <- ggplot() +
   geom_line(data=onqFMSY,aes(x=minmax,y=catch),color="lightgrey",linetype="dashed") +
   geom_boxplot(data=dat, aes(x=prod, y=x,group= as.factor(prod),
                                       col = as.factor(prod),fill = as.factor(prod)))+
-  labs(title="",x="Mean NPP (million tonnes ww per year)", y = "Landings (1000 tonnes ww per year)")+
+  labs(title="",x="Mean NPP (million tonnes ww per year)", y = "Catch (1000 tonnes ww per year)")+
   scale_fill_manual(values =c("#E5E5FF","#F2F2F2","#FFE5E5"))+ 
   scale_color_manual(values =c("blue","black","red"))+ theme_classic() + 
   theme(legend.position = "none") + 
-  annotate(geom="text", x=c(3500,3800,4100,4300), y=c(5600,4700,3800,3000), 
-           label=c("F/Fmsy= \n1.25-1","1-0.75","0.75-0.5","0.5-0.25"), color="darkgrey",size=2)
+  annotate(geom="text", x=c(3300,3800,4100,4300), y=c(5700,5100,4200,3000), 
+           label=c("F/Fmsy= \n1.25","1.0","0.75","0.50"), color="darkgrey",size=2)
+
+# catch predictions
+305*9*10^6 * C_NPP_half/1000/1000 # NWEU
+305*9*10^6 * C_NPP_one/1000/1000 # NWA
+146*9*10^6 * C_NPP_half/1000/1000 # NWA
+146*9*10^6 * C_NPP_one/1000/1000 # NWEU
+420*9*10^6 * C_NPP_half/1000/1000 # ALA
+420*9*10^6 * C_NPP_one/1000/1000 # ALA
+
 
 ######
 # SAU output
-
-# Europe
-load("Data/Sea around us/NWEU_SAU.Rdata")
-catchEU    <- aggregate(NWEU$landed_value,by=list(NWEU$year),FUN=sum,na.rm=T)
-catchEU$prod <- (305)
-
-# ALA
-load("Data/Sea around us/ALA_SAU.Rdata")
-catchALA    <- aggregate(ALA$landed_value,by=list(ALA$year),FUN=sum,na.rm=T)
-catchALA$prod <- (420)
-
-# NEUS
-load("Data/Sea around us/NWA_SAU.Rdata")
-catchNeNo   <- aggregate(NWA$landed_value,by=list(NWA$year),FUN=sum,na.rm=T)
-catchNeNo$prod <- (146)
-
-dat <- rbind(catchEU,catchALA,catchNeNo)
-dat <- subset(dat,dat$Group.1 > 2000)
-dat$x <- (dat$x)/1000000
-dat$prod <- dat$prod
 
 # Europe
 load("Data/Sea around us/NWEU_SAU.Rdata")
@@ -139,7 +128,7 @@ cor(alldat$value,alldat$corC)
 plot2 <- ggplot(alldat, aes(corC, value))
 plot2 <- plot2 + geom_smooth(method='lm', formula= y~x,colour="darkgrey",fill = "lightgrey") + 
                  geom_point(aes(colour = factor(reg),fill=factor(reg),shape= factor(reg)))+
-  ylim(c(0,2))+labs(x = "Fish landings per NPP \n (per mille)", y= "Biomass-weighted F/Fmsy")+
+  ylim(c(0,2))+labs(x = "Catch per NPP \n (per mille)", y= "Biomass-weighted F/Fmsy")+
   scale_fill_manual(values =c(adjustcolor("red", alpha.f = 0.1),
                               adjustcolor("blue", alpha.f = 0.1),
                               adjustcolor("black", alpha.f = 0.1))) + 
