@@ -7,7 +7,7 @@ source('Analysis/NWAT_Weighted_F_Fmsy.R')
 source('Analysis/ALAS_Weighted_F_Fmsy.R')
 
 # - 
-# SAU output
+# SAU output is created outside github
 # -
 # Europe
 # reg1 <- read.csv("Data/Sea around us/Europe/SAU MEOW 41 v50-0.csv")
@@ -37,6 +37,20 @@ catchALA$prod <- (420)
 # reg3 <- read.csv("Data/Sea around us/NeNo/SAU MEOW 55 v50-0.csv")
 # NWA <- rbind(reg1,reg2,reg3)
 # NWA <- subset(NWA,NWA$year > 1979)
+# 
+# # update scallop dregde discards
+# reg2 <- subset(NWA,NWA$gear_type == "dredge" & NWA$fishing_entity == "USA" & 
+#                  NWA$common_name=="American sea scallop")
+# reg2 <- subset(reg2,reg2$catch_type == "Landings")
+# reg2 <- aggregate(tonnes~year,data=reg2,FUN=sum)
+# reg2 <- data.frame(area_name = "US_update", area_type = "meow", year=reg2$year, scientific_name="Placopecten magellanicus",
+#                    common_name = "American sea scallop", functional_group = "Other demersal invertebrates",
+#                    commercial_group = "Molluscs", fishing_entity = "USA", fishing_sector = NA, catch_type = "Discards",
+#                    reporting_status ="corrected_dvd", gear_type ="dredge", end_use_type ="", 
+#                    tonnes = 0.22*reg2$tonnes/(1-0.22),landed_value=NA)
+# NWA <- subset(NWA,!(NWA$gear_type == "dredge" & NWA$fishing_entity == "USA" & 
+#                       NWA$common_name=="American sea scallop" & NWA$catch_type == "Discards"))
+# NWA <- rbind(NWA,reg2)
 # save(NWA,file="Data/Sea around us/NWA_SAU.Rdata")
 load("Data/Sea around us/NWA_SAU.Rdata")
 catchNeNo   <- aggregate(NWA$tonnes,by=list(NWA$year),FUN=sum)
@@ -49,11 +63,11 @@ dat$prod <- dat$prod
 dat$prod <- dat$prod * 9  # change NPP in million C per year to million ww per year
 
 # get the catch per NPP predictions (y-a)/b = x (model fit is done in subplot B)
-C_NPP_qur <- (0.25--0.08846)/0.75792 # catch per npp for 0.25 F/Fmsy
-C_NPP_half <- (0.5--0.08846)/0.75792 # catch per npp for 0.5 F/Fmsy
-C_NPP_thqu <- (0.75--0.08846)/0.75792 # catch per npp for 0.75 F/Fmsy
-C_NPP_one  <- (1--0.08846)/0.75792   # catch per npp for 1 F/Fmsy
-C_NPP_onq  <- (1.25--0.08846)/0.75792   # catch per npp for 1.25 F/Fmsy
+C_NPP_qur <- (0.25--0.08846)/0.72891 # catch per npp for 0.25 F/Fmsy
+C_NPP_half <- (0.5--0.08846)/0.72891 # catch per npp for 0.5 F/Fmsy
+C_NPP_thqu <- (0.75--0.08846)/0.72891 # catch per npp for 0.75 F/Fmsy
+C_NPP_one  <- (1--0.08846)/0.72891   # catch per npp for 1 F/Fmsy
+C_NPP_onq  <- (1.25--0.08846)/0.72891   # catch per npp for 1.25 F/Fmsy
 
 qurFMSY  <- data.frame(minmax  =c(900,4500),
                        catch   =c(900,4500)*10^6 * C_NPP_qur/1000/1000)
@@ -75,7 +89,7 @@ plot1 <- ggplot() +
   geom_boxplot(data=dat, aes(x=prod, y=x,group= as.factor(prod),
                                       col = as.factor(prod),fill = as.factor(prod)))+
   labs(title="",x="Mean NPP (million tonnes ww per year)", y = "Catch (1000 tonnes ww per year)")+
-  scale_fill_manual(values =c("#E5E5FF","#F2F2F2","#FFE5E5"))+ 
+  scale_fill_manual(values =c("#0000FF26","#ffca0026","#FF000026"))+ 
   scale_color_manual(values =c("blue","black","red"))+ theme_classic() + 
   theme(legend.position = "none") + 
   annotate(geom="text", x=c(3300,3800,4100,4300), y=c(5700,5100,4200,3000), 
@@ -129,9 +143,7 @@ plot2 <- ggplot(alldat, aes(corC, value))
 plot2 <- plot2 + geom_smooth(method='lm', formula= y~x,colour="darkgrey",fill = "lightgrey") + 
                  geom_point(aes(colour = factor(reg),fill=factor(reg),shape= factor(reg)))+
   ylim(c(0,2))+labs(x = "Catch per NPP \n (per mille)", y= "Biomass-weighted F/Fmsy")+
-  scale_fill_manual(values =c(adjustcolor("red", alpha.f = 0.1),
-                              adjustcolor("blue", alpha.f = 0.1),
-                              adjustcolor("black", alpha.f = 0.1))) + 
+  scale_fill_manual(values =c("#FF000026","#0000FF26","#ffca0026")) + 
   scale_color_manual(values =c("red","blue","black"))+ 
   scale_shape_manual(values =c(21,22,24)) + 
   theme_classic() + theme(legend.position = "none")
@@ -144,7 +156,7 @@ plot3 <- ggplot(data=tot,aes(x=region,y=meanfmsy,col=region)) +geom_point() + la
   geom_errorbar(ymin=tot$conf1,ymax= tot$conf2,width = 0.2) + ylim(c(0,0.5))+
   scale_color_manual(values=c("red","blue","black")) + theme_classic() + theme(legend.position = "none")
 
-pdf("Output/Figure_3.pdf",
+pdf("Output/Figure_4_catchprod.pdf",
     height = 4, width = 9)
 cowplot::plot_grid(plot1,plot2,plot3, labels = "AUTO",label_fontface = "plain", align = "h",nrow = 1)
 dev.off()

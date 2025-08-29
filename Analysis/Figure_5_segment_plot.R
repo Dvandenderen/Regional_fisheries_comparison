@@ -37,7 +37,7 @@ plot_data <- bind_rows(data_norm, divider_df)
 
 plot_data$Region <- factor(plot_data$Region, levels = c("Alaska", "NW EU", "NW Atlantic", "Divider"))
 
-pdf("../Output/Figure4_sub_operations.pdf",width = 7,height = 7)
+pdf("Output/Figure5_sub_operations.pdf",width = 7,height = 7)
 layout(matrix(c(1:16), nrow = 4, ncol = 4, byrow = TRUE))
 tr <- ggplot() +
   # Draw divider bars very narrow and full height, dodge = 0 so bars sit in the center of categories
@@ -49,7 +49,7 @@ tr <- ggplot() +
   coord_polar(start = 0) +
   scale_fill_manual(values = c(
     "Alaska" = "#FF000026",
-    "NW EU" = "#00000026",
+    "NW EU" = "#fff7bc",
     "NW Atlantic" = "#0000FF26"
   )) +
 scale_color_manual(values = c(
@@ -118,7 +118,7 @@ plot_data <- bind_rows(data_norm, divider_df)
 
 plot_data$Region <- factor(plot_data$Region, levels = c("Alaska", "NW EU", "NW Atlantic", "Divider"))
 
-pdf("../Output/Figure4_sub_effic.pdf",width = 7,height = 7)
+pdf("Output/Figure5_sub_effic.pdf",width = 7,height = 7)
 
 tr <- ggplot() +
   # Draw divider bars very narrow and full height, dodge = 0 so bars sit in the center of categories
@@ -130,7 +130,7 @@ tr <- ggplot() +
   coord_polar(start = 0) +
   scale_fill_manual(values = c(
     "Alaska" = "#FF000026",
-    "NW EU" = "#00000026",
+    "NW EU" = "#fff7bc",
     "NW Atlantic" = "#0000FF26"
   )) +
   scale_color_manual(values = c(

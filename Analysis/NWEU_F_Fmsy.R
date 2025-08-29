@@ -40,7 +40,7 @@ avg_tr <- tr %>%
 
 NWEU <- ggplot() +
   geom_line(data = tr, aes(x = Year, y = FoverFMSY, group = FishStock), alpha = 0.1) +  # group lines
-  geom_ribbon(data = avg_tr, aes(x = Year, ymin = lower, ymax = upper), fill = "black", alpha = 0.1) +  # CI ribbon
+  geom_ribbon(data = avg_tr, aes(x = Year, ymin = lower, ymax = upper), fill = "#ffca0026") +  # CI ribbon
   geom_line(data = avg_tr, aes(x = Year, y = mean_F), color = "black", size = 1.2) +  # mean line
   theme(legend.position = "none")+theme_classic() + coord_cartesian(ylim = c(0, 4.5))+labs(title="A) NW Europe")
 
