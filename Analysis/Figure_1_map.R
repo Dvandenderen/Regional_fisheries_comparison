@@ -1,230 +1,161 @@
 # ------------------------------------------------------------------------------
-# create map with the three regions
+# Figure 1: map with the three regions
 # ------------------------------------------------------------------------------
 
-# load libraries
 library(sf)
-library(gridExtra)
 library(marmap)
 library(ggplot2)
+library(patchwork)
 
-# load function to add scalebar
-source("Analysis/Function_add_scalebar.R")
+sf_use_s2(FALSE)
 
-# load polygon with countries and marine ecoregions
+# ---- helper functions -------------------------------------------------------
+
+# longitude reached when travelling `dist_km` due east from (lon, lat)
+dest_lon <- function(lon, lat, dist_km) {
+  R    <- 6371.0088
+  d    <- dist_km / R
+  phi  <- lat * pi / 180
+  lam  <- lon * pi / 180
+  phi2 <- asin(sin(phi) * cos(d) + cos(phi) * sin(d) * cos(pi / 2))
+  lam2 <- lam + atan2(sin(pi / 2) * sin(d) * cos(phi), cos(d) - sin(phi) * sin(phi2))
+  lam2 * 180 / pi                      # no wrapping, so it also works for 0-360 longitudes
+}
+
+# white scale bar from 0 to `dist_km`, with labels below the bar
+scale_bar <- function(lon, lat, dist_km = 500, label_offset = 0.5, size = 2.6) {
+  lon_end <- dest_lon(lon, lat, dist_km)
+  list(
+    annotate("segment", x = lon, xend = lon_end, y = lat, yend = lat,
+             colour = "white", linewidth = 0.6),
+    annotate("text", x = lon, y = lat - label_offset, label = "0 km",
+             colour = "white", size = size, fontface = "bold", vjust = 1),
+    annotate("text", x = lon_end, y = lat - label_offset, label = paste(dist_km, "km"),
+             colour = "white", size = size, fontface = "bold", vjust = 1)
+  )
+}
+
+# panel letter in the top-left corner of the map
+panel_tag <- function(label, lon, lat) {
+  annotate("text", x = lon, y = lat, label = label, colour = "white",
+           size = 4.5, hjust = 0, vjust = 1)
+}
+
+# bathymetry as a data frame (shift_360 = TRUE for maps across the dateline)
+get_depth <- function(lon1, lon2, lat1, lat2, antimeridian = FALSE, shift_360 = FALSE) {
+  b <- getNOAA.bathy(lon1 = lon1, lon2 = lon2, lat1 = lat1, lat2 = lat2,
+                     resolution = 10, antimeridian = antimeridian)
+  dep <- as.xyz(b)
+  names(dep) <- c("Longitude", "Latitude", "depth")
+  if (shift_360) dep$Longitude <- ifelse(dep$Longitude < 0, dep$Longitude + 360, dep$Longitude)
+  dep$depth    <- ifelse(dep$depth >= -1, -1, dep$depth)
+  dep$coldepth <- -log10(abs(dep$depth))
+  dep
+}
+
+# depth points inside a region (for the 200 m contour and the shelf fraction)
+depth_in_region <- function(dep, region) {
+  pts <- st_as_sf(dep, coords = c("Longitude", "Latitude"), remove = FALSE, crs = 4326)
+  pts[lengths(st_intersects(pts, region)) > 0, ]
+}
+
+# common map layers
+map_layers <- function(dep, depcont, land, region) {
+  list(
+    geom_tile(data = dep, aes(x = Longitude, y = Latitude, fill = coldepth)),
+    geom_contour(data = depcont, aes(x = Longitude, y = Latitude, z = depth),
+                 colour = "grey", linewidth = 0.25, breaks = -200),
+    geom_sf(data = land, col = "black", fill = "black"),
+    geom_sf(data = region, col = "white", fill = NA, linewidth = 0.4),
+    labs(x = "Longitude", y = "Latitude"),
+    theme(legend.position = "none")
+  )
+}
+
+# ---- data ---------------------------------------------------------------------
 ctrys <- rnaturalearth::ne_countries(scale = 50, returnclass = "sf")
 land  <- st_union(st_make_valid(ctrys))
 shape <- st_read("Data/MEOW shapefiles/meow_ecos.shp")
 
-# create map for NW-EU
-NWEU <- subset(shape,shape$ECOREGION %in% c("Baltic Sea","North Sea","Celtic Seas"))
+# ---- A: Northwest Europe -------------------------------------------------------
+NWEU <- subset(shape, shape$ECOREGION %in% c("Baltic Sea", "North Sea", "Celtic Seas"))
 NWEU <- st_union(st_make_valid(NWEU))
-NWEU <- st_difference(st_make_valid(NWEU),st_make_valid(land))
+NWEU <- st_difference(st_make_valid(NWEU), st_make_valid(land))
 area_NWEU <- st_area(NWEU)
 
-minlong <- -15.56598
-maxlong <- 31.79023
-minlat  <- 47 
-maxlat  <- 67.83435
-coordslim <- c(minlong,maxlong,minlat,maxlat)
-coordxmap <- round(seq(minlong,maxlong,length.out = 4))
-coordymap <- round(seq(minlat,maxlat,length.out = 4))
-
-# load depth
-papoue <- getNOAA.bathy(lon1 = -17, lon2 = 32,
-                        lat1 = 47, lat2 = 68, resolution = 10)
-# change raster to dataframe
-dep <- data.frame(Longitude= rep(as.numeric(rownames(papoue)),ncol(papoue)),
-                  Latitude=rep(as.numeric(colnames(papoue)),each=nrow(papoue)))
-depth <- c()
-for (j in 1:ncol(papoue)){
-  depth <- c(depth,papoue[,j])
-  }
-dep$depth <- depth
-dep$depth <- ifelse(dep$depth >= -1,-1,dep$depth)
-dep$coldepth <- log10(abs(dep$depth))
-dep$coldepth <- dep$coldepth*-1
-
-depcont <- dep
-depcont$xlong2 <- depcont$Longitude
-depcont$ylat2 <- depcont$Latitude
-depcont <- st_as_sf(depcont, coords = c("Longitude","Latitude"), remove = FALSE)
-st_crs(depcont) = 4326
-depin <- as.data.frame(st_intersects(depcont,NWEU))
-depcont <- depcont[depin$row.id,]
-
-# fraction of depth less 200m
-nrow(subset(depcont,depcont$depth > -200))/nrow(depcont)
+dep_NWEU  <- get_depth(-17, 32, 47, 68)
+cont_NWEU <- depth_in_region(dep_NWEU, NWEU)
+mean(cont_NWEU$depth > -200)                         # fraction of the region < 200 m
 
 NWEU_map <- ggplot() +
-  geom_point(data=dep,aes(x=Longitude,y=Latitude,col=coldepth),cex=0.35,pch=15)+
-  geom_contour(data=depcont,aes(x=xlong2,y=ylat2,z=depth),colour = "grey",lty=1,size=0.25,
-               breaks = c(-200))+
-  geom_sf(data=ctrys,col="black",fill= "black") +
-  geom_sf(data=NWEU,col="white",fill=NA, lwd=0.4)+
- coord_sf(xlim = c(minlong+1,maxlong-3),ylim=c(minlat+1,maxlat-2))+
-  theme(legend.position = "none")  +  
-  scaleBar(lon = 18.05, lat = 50, distanceLon = 500,
-                 distanceLat = 10, distanceLegend = -50, dist.unit = "km", orientation =F)
+  map_layers(dep_NWEU, cont_NWEU, ctrys, NWEU) +
+  coord_sf(xlim = c(-16.8, 29), ylim = c(47.5, 66), expand = FALSE) +
+  panel_tag("A", -16, 65.3) +
+  scale_bar(lon = 18, lat = 50) +
+  theme(axis.title.x = element_blank())
 
-# north east US
-NEUS <- subset(shape,shape$ECOREGION %in% c("Gulf of Maine/Bay of Fundy","Virginian","Scotian Shelf"))
+# ---- B: Northwest Atlantic -----------------------------------------------------
+NEUS <- subset(shape, shape$ECOREGION %in% c("Gulf of Maine/Bay of Fundy", "Virginian", "Scotian Shelf"))
 NEUS <- st_union(st_make_valid(NEUS))
-NEUS <- st_difference(st_make_valid(NEUS),st_make_valid(land))
+NEUS <- st_difference(st_make_valid(NEUS), st_make_valid(land))
 area_NEUS <- st_area(NEUS)
 
-minlong <- -80
-maxlong <- -54
-minlat  <- 32 
-maxlat  <- 49
-coordslim <- c(minlong,maxlong,minlat,maxlat)
-coordxmap <- round(seq(minlong,maxlong,length.out = 4))
-coordymap <- round(seq(minlat,maxlat,length.out = 4))
-
-# load depth
-papoue <- getNOAA.bathy(lon1 = -81, lon2 = -53,
-                        lat1 = 31, lat2 = 50, resolution = 10)
-# change raster to dataframe
-dep <- data.frame(Longitude= rep(as.numeric(rownames(papoue)),ncol(papoue)),
-                  Latitude=rep(as.numeric(colnames(papoue)),each=nrow(papoue)))
-depth <- c()
-for (j in 1:ncol(papoue)){
-  depth <- c(depth,papoue[,j])
-}
-dep$depth <- depth
-dep$depth <- ifelse(dep$depth >= -1,-1,dep$depth)
-dep$coldepth <- log10(abs(dep$depth))
-dep$coldepth <- dep$coldepth*-1
-
-depcont <- dep
-depcont$xlong2 <- depcont$Longitude
-depcont$ylat2 <- depcont$Latitude
-depcont <- st_as_sf(depcont, coords = c("Longitude","Latitude"), remove = FALSE)
-st_crs(depcont) = 4326
-depin <- as.data.frame(st_intersects(depcont,NEUS))
-depcont <- depcont[depin$row.id,]
-
-# fraction of depth less 200m
-nrow(subset(depcont,depcont$depth > -200))/nrow(depcont)
+dep_NEUS  <- get_depth(-81, -53, 31, 50)
+cont_NEUS <- depth_in_region(dep_NEUS, NEUS)
+mean(cont_NEUS$depth > -200)
 
 NEUS_map <- ggplot() +
-            geom_point(data=dep,aes(x=Longitude,y=Latitude,col=coldepth),cex=0.5,pch=15)+
-            geom_contour(data=depcont,aes(x=xlong2,y=ylat2,z=depth),colour = "grey",lty=1,size=0.25,
-                         breaks = c(-200))+
-            geom_sf(data=ctrys,col="black",fill= "black") +
-            geom_sf(data=NEUS,col="white",fill=NA, lwd=0.4)+
-            coord_sf(xlim = c(minlong+1,maxlong-1),ylim=c(minlat+1,maxlat-1)) +
-            theme(legend.position = "none")+
-                  scale_y_continuous(breaks = c(34,38,42,46)) +
-            scaleBar(lon = -65, lat = 34, distanceLon = 500,
-              distanceLat = 10, distanceLegend = -50, dist.unit = "km", orientation =F)
+  map_layers(dep_NEUS, cont_NEUS, ctrys, NEUS) +
+  coord_sf(xlim = c(-79, -55), ylim = c(33, 48), expand = FALSE) +
+  scale_y_continuous(breaks = c(34, 38, 42, 46)) +
+  panel_tag("B", -78.2, 47.4) +
+  scale_bar(lon = -63, lat = 34.6, label_offset = 0.35) +
+  theme(axis.title.x = element_blank())
 
-
-# Alaska
-ALA <- subset(shape,shape$ECOREGION %in% c("Gulf of Alaska","Aleutian Islands","Eastern Bering Sea"))
+# ---- C: Alaska (US waters only, plotted across the dateline) ---------------
+ALA <- subset(shape, shape$ECOREGION %in% c("Gulf of Alaska", "Aleutian Islands", "Eastern Bering Sea"))
 ALA <- st_union(st_make_valid(ALA))
-ALA <- st_difference(st_make_valid(ALA),st_make_valid(land))
-area_ALA <- st_area(ALA)
+ALA <- st_difference(st_make_valid(ALA), st_make_valid(land))
 
-minlong <- -180
-maxlong <- -130
-minlat  <- 45 
-maxlat  <- 70
-coordslim <- c(minlong,maxlong,minlat,maxlat)
-coordxmap <- round(seq(minlong,maxlong,length.out = 4))
-coordymap <- round(seq(minlat,maxlat,length.out = 4))
+eez <- st_read("Data/EEZ_land_union/EEZ_land_v2_201410.shp")
+rus <- st_union(st_make_valid(eez[eez$Country == "Russia", ]))
+rus <- st_union(st_buffer(st_make_valid(rus), 0.01))      # closes the gap at the dateline
+ALA <- st_difference(st_make_valid(ALA), rus)
+area_ALA <- st_area(ALA)                                  # area before any plotting buffers
 
-# load depth
+ALA360 <- st_shift_longitude(st_make_valid(ALA))
+ALA360 <- st_union(st_buffer(ALA360, 0.01))               # dissolve the dateline seam
+ALA360 <- st_buffer(st_buffer(ALA360, -0.05), 0.05)       # remove slivers
 
-papoue <- getNOAA.bathy(lon1 = -180, lon2 = -120,
-                        lat1 = 45, lat2 = 70, resolution = 10)
-# change raster to dataframe
-dep <- data.frame(Longitude= rep(as.numeric(rownames(papoue)),ncol(papoue)),
-                  Latitude=rep(as.numeric(colnames(papoue)),each=nrow(papoue)))
-depth <- c()
-for (j in 1:ncol(papoue)){
-  depth <- c(depth,papoue[,j])
+ctrys_valid <- st_geometry(st_make_valid(ctrys))
+ctrys_east  <- st_crop(ctrys_valid, xmin = 160,  xmax = 180,  ymin = 40, ymax = 75)
+ctrys_west  <- st_crop(ctrys_valid, xmin = -180, xmax = -125, ymin = 40, ymax = 75)
+ctrys360    <- c(ctrys_east, st_shift_longitude(ctrys_west))
+
+dep_ALA  <- get_depth(165, -125, 45, 70, antimeridian = TRUE, shift_360 = TRUE)
+cont_ALA <- depth_in_region(dep_ALA, ALA360)
+mean(cont_ALA$depth > -200)
+
+lon_lab <- function(x) {
+  x <- ifelse(x > 180, x - 360, x)
+  paste0(abs(x), "°", ifelse(x < 0, "W", "E"))
 }
-dep$depth <- depth
-dep$depth <- ifelse(dep$depth >= -1,-1,dep$depth)
-dep$coldepth <- log10(abs(dep$depth))
-dep$coldepth <- dep$coldepth*-1
 
-depcont <- dep
-depcont$xlong2 <- depcont$Longitude
-depcont$ylat2 <- depcont$Latitude
-depcont <- st_as_sf(depcont, coords = c("Longitude","Latitude"), remove = FALSE)
-st_crs(depcont) = 4326
-depin <- as.data.frame(st_intersects(depcont,ALA))
-depcont <- depcont[depin$row.id,]
+ALA_map <- ggplot() +
+  map_layers(dep_ALA, cont_ALA, ctrys360, ALA360) +
+  coord_sf(xlim = c(166, 231), ylim = c(45, 69), expand = FALSE) +
+  scale_x_continuous(breaks = c(170, 190, 210, 230), labels = lon_lab) +
+  scale_y_continuous(breaks = c(46, 53, 60, 67)) +
+  panel_tag("C", 167.5, 68) +
+  scale_bar(lon = 214, lat = 48, label_offset = 0.5)
 
-# fraction of depth less 200m, need to add below
-idx1 <- nrow(subset(depcont,depcont$depth > -200))
-idx2 <- nrow(depcont)
+# ---- combine ------------------------------------------------------------------
+asp <- 0.75                                               # same height/width for all maps
 
-library(ggplot2)
-al1 <- ggplot() +
-  geom_point(data=dep,aes(x=Longitude,y=Latitude,col=coldepth),cex=0.3,pch=15)+
-  geom_contour(data=depcont,aes(x=xlong2,y=ylat2,z=depth),colour = "grey",lty=1,size=0.25,
-               breaks = c(-200))+
-  geom_sf(data=ctrys,col="black",fill= "black") +
-  geom_sf(data=ALA,col="white",fill=NA, lwd=0.4)+
-  coord_sf(xlim = c(minlong+2.5,maxlong),ylim=c(minlat+1,maxlat-1)) +
-  theme(axis.title.y=element_blank(),
-        axis.text.y = element_blank(),
-        axis.ticks.y = element_blank(),legend.position = "none",
-        plot.margin = unit(c(10, 10, 10, 0), "pt"))+
-  scale_x_continuous(breaks = c(-170,-150,-130)) +
-  scaleBar(lon = -140, lat = 48, distanceLon = 500,
-           distanceLat = 10, distanceLegend = -50, dist.unit = "km", orientation =F)
+fig1 <- (NWEU_map + theme(aspect.ratio = asp)) /
+  (NEUS_map + theme(aspect.ratio = asp)) /
+  (ALA_map  + theme(aspect.ratio = asp))
 
-minlong <- 165
-maxlong <- 180
-minlat  <- 45 
-maxlat  <- 70
-coordslim <- c(minlong,maxlong,minlat,maxlat)
-coordxmap <- round(seq(minlong,maxlong,length.out = 4))
-coordymap <- round(seq(minlat,maxlat,length.out = 4))
-
-# load depth
-papoue <- getNOAA.bathy(lon1 = 165, lon2 = 180,
-                        lat1 = 45, lat2 = 70, resolution = 10)
-# change raster to dataframe
-dep <- data.frame(Longitude= rep(as.numeric(rownames(papoue)),ncol(papoue)),
-                  Latitude=rep(as.numeric(colnames(papoue)),each=nrow(papoue)))
-depth <- c()
-for (j in 1:ncol(papoue)){
-  depth <- c(depth,papoue[,j])
-}
-dep$depth <- depth
-dep$depth <- ifelse(dep$depth >= -1,-1,dep$depth)
-dep$coldepth <- log10(abs(dep$depth))
-dep$coldepth <- dep$coldepth*-1
-
-depcont <- dep
-depcont$xlong2 <- depcont$Longitude
-depcont$ylat2 <- depcont$Latitude
-depcont <- st_as_sf(depcont, coords = c("Longitude","Latitude"), remove = FALSE)
-st_crs(depcont) = 4326
-depin <- as.data.frame(st_intersects(depcont,ALA))
-depcont <- depcont[depin$row.id,]
-
-# fraction of depth less 200m
-(nrow(subset(depcont,depcont$depth > -200))+idx1)/(nrow(depcont)+idx2)
-
-al2 <- ggplot() +
-  geom_point(data=dep,aes(x=Longitude,y=Latitude,col=coldepth),cex=0.2,pch=15)+
-  geom_contour(data=depcont,aes(x=xlong2,y=ylat2,z=depth),colour = "grey",lty=1,size=0.25,
-               breaks = c(-200))+
-  geom_sf(data=ctrys,col="black",fill= "black") +
-  geom_sf(data=ALA,col="white",fill=NA, lwd=.4)+
-  coord_sf(xlim = c(minlong+1,maxlong-0.8),ylim=c(minlat+1,maxlat-1)) +
-  theme(legend.position = "none", axis.title.x=element_blank(),
-        plot.margin = unit(c(5, 0, 18, 5.5), "pt"))+
-  scale_x_continuous(breaks = c(170)) + 
-  scale_y_continuous(breaks = c(46,53,60,67))
-
-pdf("Output/Figure_1_map.pdf",width = 11, height = 5)
-grid.arrange(NWEU_map,NEUS_map,al2,al1, nrow = 1,widths = c(2.5,2.35,.88,1.77))
+pdf("Output/Figure_1_map.pdf", width = 5, height = 10.5)
+print(fig1)
 dev.off()
-

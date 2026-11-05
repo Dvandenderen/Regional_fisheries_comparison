@@ -19,6 +19,9 @@ source('Analysis/ALAS_Weighted_F_Fmsy.R')
 load("Data/Sea around us/NWEU_SAU.Rdata")
 catchEU    <- aggregate(NWEU$tonnes,by=list(NWEU$year),FUN=sum)
 catchEU$prod <- (305)
+catchEU$corC <- catchEU$x / (catchEU$prod*9*10^6) * 1000
+NWEUR <- cbind(NWEUR,catchEU [match(NWEUR$years,catchEU$Group.1),c(4)])
+colnames(NWEUR)[ncol(NWEUR)] <- "corC"
 
 # ALA
 # reg1 <- read.csv("Data/Sea around us/Alaska/SAU MEOW 17 v50-0.csv")
@@ -26,10 +29,16 @@ catchEU$prod <- (305)
 # reg3 <- read.csv("Data/Sea around us/Alaska/SAU MEOW 177 v50-0.csv")
 # ALA <- rbind(reg1,reg2,reg3)
 # ALA <- subset(ALA,ALA$year > 1979)
-# save(ALA,file="Data/Sea around us/ALA_SAU.Rdata")
+# save(ALA,file="Data/Sea around us/ALA_SAU_old.Rdata")
+# ALA <- read.csv("Data/Sea around us/SAU EEZ 959 v50-1.csv")
+# save(ALA,file="Data/Sea around us/ALA_SAU.Rdata") US only
+
 load("Data/Sea around us/ALA_SAU.Rdata")
 catchALA    <- aggregate(ALA$tonnes,by=list(ALA$year),FUN=sum)
-catchALA$prod <- (420)
+catchALA$prod <- (404) # new value without russia
+catchALA$corC <- catchALA$x/ (catchALA$prod*9*10^6) * 1000
+Alaska <- cbind(Alaska,catchALA [match(Alaska$years,catchALA$Group.1),c(4)])
+colnames(Alaska)[ncol(Alaska)] <- "corC"
 
 # NW Atlantic
 # reg1 <- read.csv("Data/Sea around us/NeNo/SAU MEOW 229 v50-0.csv")
@@ -55,7 +64,21 @@ catchALA$prod <- (420)
 load("Data/Sea around us/NWA_SAU.Rdata")
 catchNeNo   <- aggregate(NWA$tonnes,by=list(NWA$year),FUN=sum)
 catchNeNo$prod <- (146)
+catchNeNo$corC <- catchNeNo$x/ (catchNeNo$prod*9*10^6) * 1000
+NEUS <- cbind(NEUS,catchNeNo [match(NEUS$years,catchNeNo$Group.1),c(4)])
+colnames(NEUS)[ncol(NEUS)] <- "corC"
 
+alldat <- rbind(NEUS,NWEUR,Alaska)
+alldat <- subset(alldat, alldat$years < 2020)
+alldat <- subset(alldat,!(alldat$reg=="NEUS" & alldat$years %in% c(1980,1981)))
+
+mod1 <- (lm(alldat$value~alldat$corC))
+summary(mod1)
+int <- mod1$coefficients[1]
+slope <- mod1$coefficients[2]
+cor(alldat$value,alldat$corC)
+
+# plot 1
 dat <- rbind(catchEU,catchALA,catchNeNo)
 dat <- subset(dat,dat$Group.1 > 2000)
 dat$x <- (dat$x)/1000
@@ -63,11 +86,11 @@ dat$prod <- dat$prod
 dat$prod <- dat$prod * 9  # change NPP in million C per year to million ww per year
 
 # get the catch per NPP predictions (y-a)/b = x (model fit is done in subplot B)
-C_NPP_qur <- (0.25--0.08846)/0.72891 # catch per npp for 0.25 F/Fmsy
-C_NPP_half <- (0.5--0.08846)/0.72891 # catch per npp for 0.5 F/Fmsy
-C_NPP_thqu <- (0.75--0.08846)/0.72891 # catch per npp for 0.75 F/Fmsy
-C_NPP_one  <- (1--0.08846)/0.72891   # catch per npp for 1 F/Fmsy
-C_NPP_onq  <- (1.25--0.08846)/0.72891   # catch per npp for 1.25 F/Fmsy
+C_NPP_qur <- (0.25- int)/slope # catch per npp for 0.25 F/Fmsy
+C_NPP_half <- (0.5-int)/slope # catch per npp for 0.5 F/Fmsy
+C_NPP_thqu <- (0.75-int)/slope # catch per npp for 0.75 F/Fmsy
+C_NPP_one  <- (1- int)/slope   # catch per npp for 1 F/Fmsy
+C_NPP_onq  <- (1.25-int)/slope   # catch per npp for 1.25 F/Fmsy
 
 qurFMSY  <- data.frame(minmax  =c(900,4500),
                        catch   =c(900,4500)*10^6 * C_NPP_qur/1000/1000)
@@ -92,54 +115,19 @@ plot1 <- ggplot() +
   scale_fill_manual(values =c("#0000FF26","#ffca0026","#FF000026"))+ 
   scale_color_manual(values =c("blue","black","red"))+ theme_classic() + 
   theme(legend.position = "none") + 
-  annotate(geom="text", x=c(3300,3800,4100,4300), y=c(5700,5100,4200,3000), 
-           label=c("F/Fmsy= \n1.25","1.0","0.75","0.50"), color="darkgrey",size=2)
+  annotate(geom="text", x=c(3000,3400,3800,4100,4300,4400), y=c(5900,5800,5100,4200,3000,1600), 
+           label=c("F/Fmsy=","1.25","1.0","0.75","0.50","0.25"), color="darkgrey",size=2)
 
 # catch predictions
 305*9*10^6 * C_NPP_half/1000/1000 # NWEU
-305*9*10^6 * C_NPP_one/1000/1000 # NWA
+305*9*10^6 * C_NPP_one/1000/1000 # NWEU
 146*9*10^6 * C_NPP_half/1000/1000 # NWA
-146*9*10^6 * C_NPP_one/1000/1000 # NWEU
-420*9*10^6 * C_NPP_half/1000/1000 # ALA
-420*9*10^6 * C_NPP_one/1000/1000 # ALA
-
+146*9*10^6 * C_NPP_one/1000/1000 # NWA
+404*9*10^6 * C_NPP_half/1000/1000 # ALA
+404*9*10^6 * C_NPP_one/1000/1000 # ALA
 
 ######
-# SAU output
-
-# Europe
-load("Data/Sea around us/NWEU_SAU.Rdata")
-catchEU    <- aggregate(NWEU$tonnes,by=list(NWEU$year),FUN=sum)
-
-head(catchEU)
-catchEU$corC <- catchEU$x / (305*9*10^6) * 1000
-NWEUR <- cbind(NWEUR,catchEU [match(NWEUR$years,catchEU$Group.1),c(3)])
-colnames(NWEUR)[ncol(NWEUR)] <- "corC"
-
-# ALA
-load("Data/Sea around us/ALA_SAU.Rdata")
-catchALA    <- aggregate(ALA$tonnes,by=list(ALA$year),FUN=sum)
-
-catchALA$corC <- catchALA$x/ (420*9*10^6) * 1000
-Alaska <- cbind(Alaska,catchALA [match(Alaska$years,catchALA$Group.1),c(3)])
-colnames(Alaska)[ncol(Alaska)] <- "corC"
-
-# NEUS
-load("Data/Sea around us/NWA_SAU.Rdata")
-catchNeNo   <- aggregate(NWA$tonnes,by=list(NWA$year),FUN=sum)
-
-catchNeNo$corC <- catchNeNo$x/ (146*9*10^6) * 1000
-NEUS <- cbind(NEUS,catchNeNo [match(NEUS$years,catchNeNo$Group.1),c(3)])
-colnames(NEUS)[ncol(NEUS)] <- "corC"
-
-alldat <- rbind(NEUS,NWEUR,Alaska)
-alldat <- subset(alldat, alldat$years < 2020)
-alldat <- subset(alldat,!(alldat$reg=="NEUS" & alldat$years %in% c(1980,1981)))
-
-summary(lm(alldat$value~alldat$corC))
-cor(alldat$value,alldat$corC)
-
-plot2 <- ggplot(alldat, aes(corC, value))
+plot2 <- ggplot(alldat, aes(x=corC, y=value))
 plot2 <- plot2 + geom_smooth(method='lm', formula= y~x,colour="darkgrey",fill = "lightgrey") + 
                  geom_point(aes(colour = factor(reg),fill=factor(reg),shape= factor(reg)))+
   ylim(c(0,2))+labs(x = "Catch per NPP \n (per mille)", y= "Biomass-weighted F/Fmsy")+
@@ -156,7 +144,13 @@ plot3 <- ggplot(data=tot,aes(x=region,y=meanfmsy,col=region)) +geom_point() + la
   geom_errorbar(ymin=tot$conf1,ymax= tot$conf2,width = 0.2) + ylim(c(0,0.5))+
   scale_color_manual(values=c("red","blue","black")) + theme_classic() + theme(legend.position = "none")
 
-pdf("Output/Figure_4_catchprod.pdf",
+pdf("Output/Figure_3_catchprod.pdf",
     height = 4, width = 9)
 cowplot::plot_grid(plot1,plot2,plot3, labels = "AUTO",label_fontface = "plain", align = "h",nrow = 1)
 dev.off()
+
+
+# potential productivity
+# catch per NPP / F/Fmsy
+alldat$PFP <- alldat$corC / alldat$value
+aggregate(alldat$PFP,by=list(alldat$reg),FUN=mean)

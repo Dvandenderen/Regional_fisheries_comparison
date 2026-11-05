@@ -83,7 +83,7 @@ for (j in 1:42){
   daty <- subset(tr,tr$Year == years[j])
   daty <- subset(daty,!(is.na(daty$FoverFMSY)) & !(is.na(daty$Bio)))
   reg$numb[j] <- nrow(daty)
-  reg$overexplot[j] <- length(which(daty$FoverFMSY > 1.1))
+  reg$overexplot[j] <- length(which(daty$FoverFMSY > 1))
   reg$var[j] <- Hmisc::wtd.var(daty$FoverFMSY,daty$Bio)
   reg$value[j] <- sum(daty$FoverFMSY*daty$Bio)/sum(daty$Bio)
   stderr <- sqrt(reg$var[j]/reg$numb[j])
